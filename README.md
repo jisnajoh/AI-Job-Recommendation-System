@@ -32,6 +32,20 @@ The goal of this project is to:
 - Developed job matching using similarity scores
 - Created a basic user interface using Streamlit
 
+## Screenshots
+
+### Main Interface
+![Main](Main.png)
+
+### Job Recommendations
+![Recommendations](Recommendations.png)
+
+### Job Market Summary
+![Market](Job_Market.png)
+
+### Insights
+![Insights](insights.png)
+
 ## Future Improvements
 
 - Add dashboard for visualization
