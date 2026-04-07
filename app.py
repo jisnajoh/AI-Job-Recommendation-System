@@ -103,7 +103,15 @@ COMMON_JOB_SKILLS = {
     "windows server", "active directory", "vmware", "citrix",
     "load balancing", "scripting", "automation", "shell scripting",
     "batch processing", "data migration", "testing",
-    "unit testing", "integration testing", "qa", "quality assurance"
+    "unit testing", "integration testing", "qa", "quality assurance",
+    "matplotlib", "seaborn", "tf-idf", "eda", "php",
+    "data validation", "openshift", "macros", "excel macros",
+    "fraud analytics", "cybersecurity", "databases",
+    "data collection", "analytical skills", "toggl",
+    "teams", "microsoft teams", "cosine similarity",
+    "scala", "heatmaps", "scatter plots", "data extraction",
+    "inventory management", "rekognition", "iam",
+    "s3", "data profiling"
 }
 
 # =========================================================
@@ -332,7 +340,6 @@ SKILL_ALIASES = {
     "sql server": "sql",
     "ms sql": "sql",
     "ms sql server": "sql",
-    "aws s3": "aws",
     "amazon web services": "aws",
     "scikit learn": "scikit-learn",
     "electronic health record": "ehr",
@@ -380,7 +387,16 @@ SKILL_ALIASES = {
     "microsoft office": "ms office",
     "qlik sense": "qlik",
     "python development": "python",
-    "r development": "r"
+    "r development": "r",
+    "exploratory data analysis": "eda",
+    "toggl track": "toggl",
+    "microsoft teams": "teams",
+    "ms teams": "teams",
+    "amazon rekognition": "rekognition",
+    "aws rekognition": "rekognition",
+    "amazon s3": "s3",
+    "aws s3": "s3",
+    "aws iam": "iam"
 }
 
 INDUSTRY_RULES = {
@@ -459,6 +475,10 @@ _SENTENCE_WORDS = {
     "from", "into", "with", "within", "without", "between",
     "about", "after", "before", "during", "through",
     "across", "along", "around", "because", "since",
+    "to", "for", "of", "in", "on", "at", "a", "an",
+    "and", "or", "is", "are", "was", "were", "be",
+    "its", "no", "all", "any", "each", "every",
+    "such", "so", "if", "but", "yet", "nor",
 }
 
 # Regex patterns that indicate non-skill phrases
@@ -526,6 +546,7 @@ def infer_target_industry_from_user_text(user_text: str):
 def extract_requirement_phrases(text: str):
     text = clean_for_matching(text)
     candidates = set()
+    skill_dict = get_skill_dictionary("All")
 
     patterns = [
         r"(?:experience with|proficiency in|knowledge of|expertise in|skilled in|hands[- ]on experience with|experience using|working knowledge of|familiarity with)\s+([a-zA-Z0-9\+\#\/\-\s,]{3,300})",
@@ -541,8 +562,20 @@ def extract_requirement_phrases(text: str):
             parts = re.split(r",|;|/|\band\b|\bor\b", m)
             for p in parts:
                 p = p.strip(" .:-").lower()
-                if looks_like_skill(p):
+                # Check if the whole fragment is a known skill or alias
+                if p in skill_dict or p in SKILL_ALIASES:
                     candidates.add(SKILL_ALIASES.get(p, p))
+                else:
+                    # Scan the fragment for known skills embedded in it
+                    piece = clean_for_matching(p)
+                    for sk in sorted(skill_dict, key=len, reverse=True):
+                        pat2 = r"(?<!\w)" + re.escape(sk) + r"(?!\w)"
+                        if re.search(pat2, piece):
+                            candidates.add(sk)
+                    for alias, canon in SKILL_ALIASES.items():
+                        pat2 = r"(?<!\w)" + re.escape(alias) + r"(?!\w)"
+                        if re.search(pat2, piece):
+                            candidates.add(canon)
 
     return sorted(candidates)
 
@@ -625,7 +658,7 @@ def extract_exact_job_skills(job_title: str, job_description: str):
     # 4. Bullet / line scanning
     found.update(extract_bullet_like_terms(text_raw))
 
-    # 5. Direct scan for "using X, Y, Z"
+    # 5. Direct scan for "using X, Y, Z" - validate against skill dictionary
     using_matches = re.findall(
         r"(?:using|use of|experience with|proficient in)\s+([a-zA-Z0-9\+\#\/\-\s,]{3,300})",
         text,
@@ -635,8 +668,18 @@ def extract_exact_job_skills(job_title: str, job_description: str):
         parts = re.split(r",|;|/|\band\b|\bor\b", match)
         for p in parts:
             p = p.strip(" .:-").lower()
-            if looks_like_skill(p):
+            if p in skill_dict or p in SKILL_ALIASES:
                 found.add(SKILL_ALIASES.get(p, p))
+            else:
+                piece = clean_for_matching(p)
+                for sk in sorted(skill_dict, key=len, reverse=True):
+                    pat = r"(?<!\w)" + re.escape(sk) + r"(?!\w)"
+                    if re.search(pat, piece):
+                        found.add(sk)
+                for alias, canon in SKILL_ALIASES.items():
+                    pat = r"(?<!\w)" + re.escape(alias) + r"(?!\w)"
+                    if re.search(pat, piece):
+                        found.add(canon)
 
     # 6. Fallback broader extraction
     if not found:
