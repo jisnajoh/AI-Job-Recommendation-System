@@ -784,6 +784,146 @@ else:
 
 
 # =========================
+# SKILL GAP ANALYSIS
+# =========================
+st.markdown('<div class="section-title">🔍 Skill Gap Analysis</div>', unsafe_allow_html=True)
+st.markdown(
+    "Paste a job posting below to see exactly which skills you have, which are missing, "
+    "and get a clear gap analysis.",
+)
+
+job_posting_text = st.text_area(
+    "Paste the job posting text here",
+    height=200,
+    placeholder=(
+        "Paste the full job posting or just the requirements/qualifications section here...\n\n"
+        "Example: We are looking for a Data Analyst with skills in Python, SQL, "
+        "Power BI, Excel, Data Analysis, Machine Learning, and NLP..."
+    ),
+)
+
+analyze_gap = st.button("Analyze Skill Gap", type="secondary")
+
+if analyze_gap and job_posting_text.strip():
+    job_posting_skills = extract_skills_from_text(job_posting_text, target_industry_ui)
+
+    req_phrases = extract_requirement_phrases(job_posting_text)
+    for rp in req_phrases:
+        if rp not in job_posting_skills and looks_like_skill(rp):
+            job_posting_skills.append(rp)
+    job_posting_skills = sorted(set(job_posting_skills))
+
+    if not job_posting_skills:
+        st.warning("No skills could be extracted from the job posting. Try pasting a longer description.")
+    elif not user_skills:
+        st.warning("Please upload a resume or type your skills first so we can compare.")
+    else:
+        gap_score, matched_skills, missing_skills, extra_skills = skill_match(
+            user_skills, job_posting_skills
+        )
+
+        g1, g2, g3 = st.columns(3)
+        with g1:
+            st.markdown(f"""
+            <div class="metric-card">
+              <div class="metric-title">Job Posting Skills</div>
+              <div class="metric-value">{len(job_posting_skills)}</div>
+            </div>
+            """, unsafe_allow_html=True)
+        with g2:
+            st.markdown(f"""
+            <div class="metric-card">
+              <div class="metric-title">Your Matching Skills</div>
+              <div class="metric-value">{len(matched_skills)}</div>
+            </div>
+            """, unsafe_allow_html=True)
+        with g3:
+            st.markdown(f"""
+            <div class="metric-card">
+              <div class="metric-title">Skills You're Missing</div>
+              <div class="metric-value">{len(missing_skills)}</div>
+            </div>
+            """, unsafe_allow_html=True)
+
+        st.markdown(f"""
+        <div style="
+            background: linear-gradient(90deg,
+                #dcfce7 0%,
+                #dcfce7 {gap_score * 100:.0f}%,
+                #fecaca {gap_score * 100:.0f}%,
+                #fecaca 100%);
+            border-radius: 12px;
+            padding: 14px 18px;
+            margin: 12px 0 18px 0;
+            border: 1px solid #e5e7eb;
+            text-align: center;
+            font-weight: 700;
+            font-size: 1.1rem;
+        ">
+            Skill Match: {gap_score * 100:.0f}% — You have {len(matched_skills)} of {len(job_posting_skills)} required skills
+        </div>
+        """, unsafe_allow_html=True)
+
+        st.markdown("#### Skills Found in the Job Posting")
+        posting_badges = ""
+        for sk in job_posting_skills:
+            if sk in [s.lower().strip() for s in user_skills]:
+                posting_badges += f'<span class="badge badge-green">{sk}</span>'
+            else:
+                posting_badges += f'<span class="badge badge-orange">{sk}</span>'
+        st.markdown(posting_badges, unsafe_allow_html=True)
+        st.caption("Green = you have it, Orange = missing")
+
+        col_match, col_miss = st.columns(2)
+
+        with col_match:
+            st.markdown("#### ✅ Matched Skills")
+            if matched_skills:
+                for sk in matched_skills:
+                    st.write(f"- {sk}")
+            else:
+                st.write("No matching skills found.")
+
+        with col_miss:
+            st.markdown("#### ❌ Missing Skills")
+            if missing_skills:
+                for sk in missing_skills:
+                    st.write(f"- {sk}")
+            else:
+                st.success("You have all the required skills!")
+
+        if extra_skills:
+            st.markdown("#### ➕ Extra Skills You Have (not in this posting)")
+            extra_badges = " ".join(
+                [f'<span class="badge badge-blue">{sk}</span>' for sk in extra_skills]
+            )
+            st.markdown(extra_badges, unsafe_allow_html=True)
+            st.caption(
+                "These skills from your resume aren't listed in this job posting, "
+                "but they may still add value to your application."
+            )
+
+        if missing_skills:
+            st.markdown("#### 📚 Recommended Next Steps")
+            st.write(
+                "To improve your chances for this role, consider learning or "
+                "highlighting these missing skills:"
+            )
+            for i, sk in enumerate(missing_skills[:5], 1):
+                st.write(f"**{i}. {sk}**")
+            if len(missing_skills) > 5:
+                st.caption(
+                    f"...and {len(missing_skills) - 5} more. "
+                    "See the full list above."
+                )
+
+elif analyze_gap and not job_posting_text.strip():
+    st.warning("Please paste a job posting text above before analyzing.")
+
+st.divider()
+
+
+# =========================
 # MATCHING
 # =========================
 st.markdown('<div class="section-title">🎯 Job Recommendations</div>', unsafe_allow_html=True)
