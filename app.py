@@ -87,7 +87,23 @@ COMMON_JOB_SKILLS = {
     "dashboard development", "structured data", "unstructured data",
     "data profiling", "data quality", "data integration",
     "data pipelines", "predictive modeling", "reporting tools",
-    "visualization tools", "business intelligence"
+    "visualization tools", "business intelligence",
+    "ms project", "ms visio", "sharepoint", "microsoft sharepoint",
+    "transact-sql", "t-sql", "stored procedures", "palantir",
+    "c++", "c#", "ruby", "go", "rust", "kotlin", "swift",
+    "ms office", "visio", "jira", "confluence", "agile", "scrum",
+    "devops", "ci/cd", "kubernetes", "terraform", "ansible",
+    "data entry", "typing", "ms access", "access",
+    "regression analysis", "predictive analytics", "deep learning",
+    "natural language processing", "computer vision",
+    "sql queries", "performance improvement", "schema",
+    "flat file", "data integration", "database management",
+    "security clearance", "comptia", "information technology",
+    "technical support", "help desk", "networking", "tcp/ip",
+    "windows server", "active directory", "vmware", "citrix",
+    "load balancing", "scripting", "automation", "shell scripting",
+    "batch processing", "data migration", "testing",
+    "unit testing", "integration testing", "qa", "quality assurance"
 }
 
 # =========================================================
@@ -284,7 +300,28 @@ GENERIC_NOT_SKILLS = {
     "position", "positions", "strong", "excellent", "preferred", "required",
     "ability to", "must have", "should have", "plus", "etc", "using",
     "including", "preferred qualifications", "basic", "advanced", "benefits",
-    "salary", "pay range", "responsibility"
+    "salary", "pay range", "responsibility",
+    "duties", "duty", "metrics", "programs", "program", "location",
+    "citizen", "citizenship", "clearance", "applicant", "applicants",
+    "collaboratively", "selected", "currently", "minimum", "maximum",
+    "year", "years", "degree", "bachelor", "master", "phd",
+    "related", "related experience", "equivalent", "comparable",
+    "full time", "part time", "contract", "temporary", "permanent",
+    "company", "employer", "department", "division", "group",
+    "ideal", "looking for", "seeking", "need", "needs",
+    "us citizen", "us citizens", "united states",
+    "description", "overview", "summary", "about", "mission",
+    "compensation", "equal opportunity", "eoe", "disability",
+    "veteran", "veterans", "accommodation", "accommodations",
+    "multiple", "various", "several", "other", "additional",
+    "environment", "fast paced", "detail oriented",
+    "independently", "collaborate", "collaboration",
+    "ensure", "maintain", "provide", "assist", "perform",
+    "develop", "create", "implement", "manage", "coordinate",
+    "review", "prepare", "analyze", "evaluate", "monitor",
+    "communicate", "participate", "contribute", "handle",
+    "formats", "format", "methods", "method", "processes", "process",
+    "networks", "network", "systems", "system"
 }
 
 SKILL_ALIASES = {
@@ -294,6 +331,7 @@ SKILL_ALIASES = {
     "structured query language": "sql",
     "sql server": "sql",
     "ms sql": "sql",
+    "ms sql server": "sql",
     "aws s3": "aws",
     "amazon web services": "aws",
     "scikit learn": "scikit-learn",
@@ -320,7 +358,29 @@ SKILL_ALIASES = {
     "alteryx designer": "alteryx",
     "knime analytics platform": "knime",
     "dashboarding": "dashboard development",
-    "reporting tools": "reporting"
+    "reporting tools": "reporting",
+    "microsoft project": "ms project",
+    "microsoft visio": "ms visio",
+    "microsoft sharepoint": "sharepoint",
+    "ms sharepoint": "sharepoint",
+    "transact sql": "transact-sql",
+    "t sql": "transact-sql",
+    "tsql": "transact-sql",
+    "c sharp": "c#",
+    "csharp": "c#",
+    "cplusplus": "c++",
+    "palantir foundry": "palantir",
+    "tableau software": "tableau",
+    "tableau products": "tableau",
+    "sql server reporting services": "ssrs",
+    "sql server integration services": "ssis",
+    "sql server analysis services": "ssas",
+    "sql server management studio": "ssms",
+    "ms office": "ms office",
+    "microsoft office": "ms office",
+    "qlik sense": "qlik",
+    "python development": "python",
+    "r development": "r"
 }
 
 INDUSTRY_RULES = {
@@ -389,18 +449,49 @@ def parse_skill_list(x):
     return [p.strip().lower() for p in parts if p.strip()]
 
 
+# Words that signal a phrase is a sentence fragment, not a skill
+_SENTENCE_WORDS = {
+    "shall", "will", "would", "could", "should", "must", "may", "might",
+    "the", "this", "that", "these", "those", "their", "our", "your",
+    "who", "whom", "which", "where", "when", "what", "how", "why",
+    "been", "being", "have", "has", "had", "does", "did",
+    "not", "also", "very", "just", "only", "than", "then",
+    "from", "into", "with", "within", "without", "between",
+    "about", "after", "before", "during", "through",
+    "across", "along", "around", "because", "since",
+}
+
+# Regex patterns that indicate non-skill phrases
+_NON_SKILL_PATTERNS = [
+    r"\b(?:us citizen|citizen|citizenship|clearance|secret clearance)\b",
+    r"\b(?:new jersey|new york|california|texas|florida|ohio|virginia|maryland|illinois|georgia|lakehurst|marietta|atlanta|chicago|houston|dallas|boston|seattle|denver|phoenix|portland|charlotte|raleigh|tampa|orlando|austin|nashville|indianapolis|columbus|detroit|minneapolis|milwaukee|kansas city|st louis|pittsburgh|cleveland|cincinnati|san francisco|san diego|los angeles|sacramento|san jose|san antonio|jacksonville|memphis|louisville|richmond|norfolk|newark|jersey city|trenton|camden|paterson|edison|elizabeth|county|township|borough|village)\b",
+    r"\b(?:at least|one or more|years? of|degree in|four year|must be|ability to|required to|responsible for|selected for|able to)\b",
+    r"\b(?:shall|will|would|could|should)\s+\w+",
+    r"^the\s+",
+    r"\b(?:develop|prepare|maintain|ensure|perform|assist|create|implement|coordinate|participate|handle|review|evaluate|monitor)\s+",
+]
+
+
 def looks_like_skill(s: str) -> bool:
     s = (s or "").strip().lower()
-    if not (2 <= len(s) <= 60):
+    if not (2 <= len(s) <= 40):
         return False
     if s in GENERIC_NOT_SKILLS:
         return False
-    if len(s.split()) > 6:
+    words = s.split()
+    if len(words) > 4:
         return False
     if not re.search(r"[a-z0-9\+#]", s):
         return False
     if s.isdigit():
         return False
+    # Reject if any word is a sentence/filler word (indicates a fragment, not a skill)
+    if len(words) >= 2 and any(w in _SENTENCE_WORDS for w in words):
+        return False
+    # Reject phrases matching non-skill patterns
+    for pat in _NON_SKILL_PATTERNS:
+        if re.search(pat, s):
+            return False
     return True
 
 
@@ -479,12 +570,6 @@ def extract_bullet_like_terms(text: str):
             pattern = r"(?<!\w)" + re.escape(alias) + r"(?!\w)"
             if re.search(pattern, piece):
                 out.add(canon)
-
-        phrase_parts = re.split(r",|;|/|\band\b|\bor\b", piece)
-        for p in phrase_parts:
-            p = p.strip(" .:-").lower()
-            if looks_like_skill(p):
-                out.add(SKILL_ALIASES.get(p, p))
 
     return sorted(out)
 
