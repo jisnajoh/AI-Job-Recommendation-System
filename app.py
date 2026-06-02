@@ -11,7 +11,7 @@ A Streamlit web app that:
      with aliases) and produces honest, verifiable match scores
 
 Every number shown is the actual computed value. If skill extraction
-is incomplete (<4 skills) we cap the displayed skill score at 50% and
+is incomplete (<8 skills) we cap the displayed skill score based on source and
 show a warning, so the user is never misled.
 
 Run locally:
@@ -76,8 +76,10 @@ APP_KEY = st.secrets.get("ADZUNA_APP_KEY", None)
 USA_PATTERNS = r"united states|usa|us"
 
 # Minimum number of extracted job skills before a 100% match is considered
-# trustworthy. Below this we cap the skill score at 50% (honesty rule).
-MIN_JOB_SKILLS_FOR_FULL_SCORE = 4
+# trustworthy. Source-aware caps are applied below this threshold.
+MIN_JOB_SKILLS_FOR_FULL_SCORE = 8
+API_SNIPPET_LOW_EXTRACTION_CAP = 0.50
+FULL_DESC_LOW_EXTRACTION_CAP = 0.70
 
 BROWSER_HEADERS = {
     "User-Agent": (
@@ -138,14 +140,16 @@ COMMON_JOB_SKILLS = {
     "data mining", "etl pipelines", "data storytelling", "storytelling",
     "data reliability", "schema design", "scope management",
     "requirements negotiation", "data quality testing",
-    "data presentation", "insight generation",
+    "data presentation", "insight generation", "microsoft excel"
     # BUG 3/4/5 FIX — skills flagged as missing by professor
     "data interpretation", "presentation skills", "report writing",
+    "database", "databases", "apis", "jupyter", "tensorflow", "pytorch",
+    "keras", "xgboost", "spark", "kafka",
 
     # ---- Databases ----
     "mysql", "postgresql", "sqlite", "sql server", "mongodb",
     "oracle", "nosql", "snowflake", "bigquery", "redshift",
-    "stored procedures", "transact-sql", "t-sql",
+    "stored procedures", "transact-sql", "t-sql", "rdbms"
 
     # ---- Cloud & DevOps ----
     "aws", "azure", "gcp", "cloud computing", "docker", "kubernetes",
@@ -171,7 +175,7 @@ COMMON_JOB_SKILLS = {
     # ---- Office / Productivity ----
     "powerpoint", "word", "outlook", "ms office", "ms access",
     "sharepoint", "ms project", "ms visio", "jira", "confluence",
-    "agile", "scrum", "kanban",
+    "agile", "scrum", "kanban", "excel"
 
     # ---- Soft skills ----
     "communication", "teamwork", "leadership", "documentation",
@@ -184,34 +188,46 @@ COMMON_JOB_SKILLS = {
     "treatment planning", "care coordination", "patient education",
     "medical records", "ehr", "emr", "epic", "cerner", "hipaa",
     "infection control", "telehealth", "case management",
-    "medical terminology",
+    "medical terminology", "clinical documentation", "insurance verification",
+    "prior authorization", "icd-10", "cpt", "medical coding",
+    "claims processing", "medication administration",
 
     # ---- Accounting / Finance ----
     "accounting", "bookkeeping", "financial reporting", "budgeting",
     "audit", "auditing", "gaap", "accounts payable",
     "accounts receivable", "bank reconciliation", "payroll",
     "financial analysis", "tax preparation", "quickbooks",
-    "general ledger", "cash flow", "reconciliation",
+    "general ledger", "cash flow", "reconciliation", "variance analysis",
+    "financial modeling", "month-end close",
 
     # ---- Business / Ops ----
     "business analysis", "requirements gathering", "process improvement",
     "operations management", "workflow optimization", "crm",
     "salesforce", "vendor management", "supply chain",
-    "customer service", "sap", "erp", "workday",
+    "customer service", "sap", "erp", "workday", "change management",
+    "risk management", "inventory management", "procurement",
 
     # ---- Marketing ----
-    "seo", "sem", "social media", "campaign management",
+    "seo", "sem", "social media", "social media marketing", "campaign management",
     "content marketing", "content creation", "email marketing",
     "brand strategy", "market research", "advertising",
     "copywriting", "digital marketing", "lead generation",
+    "marketing analytics", "paid search", "paid social", "hubspot",
+    "mailchimp",
 
     # ---- HR / Education ----
     "recruitment", "talent acquisition", "employee relations",
     "onboarding", "benefits administration", "performance management",
     "hris", "policy compliance", "interviewing", "candidate screening",
     "teaching", "curriculum development", "lesson planning",
-    "classroom management", "assessment",
-    "academic advising", "instruction",
+    "classroom management", "assessment", "grading",
+    "academic advising", "instruction", "student engagement",
+    "lms", "canvas", "blackboard",
+
+    # ---- Customer service / Administration ----
+    "data entry", "scheduling", "calendar management",
+    "email communication", "records management", "phone support",
+    "order processing", "administrative support", "office administration",
 
     # ---- Testing / QA ----
     "unit testing", "integration testing", "qa", "quality assurance",
@@ -226,6 +242,10 @@ SKILL_ALIASES = {
     "excel reports": "excel",
     "excel spreadsheets": "excel",
     "excel spreadsheet": "excel",
+    "microsoft spreadsheets": "excel",
+    "microsoft spreadsheet": "excel",
+    "google spreadsheets": "google sheets",
+    "google spreadsheet": "google sheets",
     "advanced excel": "excel",
 
     # Power BI
@@ -272,6 +292,8 @@ SKILL_ALIASES = {
     "js": "javascript",
     "restful api": "rest api",
     "application programming interface": "api",
+    "application programming interfaces": "api",
+    "apis": "api",
     "bi tools": "business intelligence",
     "business intelligence tools": "business intelligence",
     "google bigquery": "bigquery",
@@ -283,11 +305,18 @@ SKILL_ALIASES = {
     "microsoft project": "ms project",
     "microsoft visio": "ms visio",
     "electronic health record": "ehr",
+    "electronic health records": "ehr",
     "electronic medical record": "emr",
+    "electronic medical records": "emr",
     "search engine optimization": "seo",
     "search engine marketing": "sem",
     "customer relationship management": "crm",
     "human resource information system": "hris",
+    "human resources information system": "hris",
+    "human resource information systems": "hris",
+    "hr information system": "hris",
+    "ap processing": "accounts payable",
+    "ar processing": "accounts receivable",
     "dashboarding": "dashboards",
     "dashboard development": "dashboards",
     "dashboard": "dashboards",
@@ -346,7 +375,16 @@ SKILL_ALIASES = {
     "etl process": "etl",
     "etl/elt": "etl",
     "extract transform load": "etl",
+    "extract transform and load": "etl",
     "extract, transform, load": "etl",
+    "extract, transform, and load": "etl",
+    "learning management system": "lms",
+    "learning management systems": "lms",
+    "general ledger accounting": "general ledger",
+    "month end close": "month-end close",
+    "close process": "month-end close",
+    "paid search advertising": "paid search",
+    "social media management": "social media marketing",
 
     # BUG 3 FIX
     "interpretation": "data interpretation",
@@ -691,9 +729,20 @@ st.markdown("""
     background: #ffffff; border: 1px solid #e5e7eb;
     border-radius: 18px; padding: 0.9rem 1rem;
     box-shadow: 0 4px 14px rgba(0,0,0,0.03);
+    min-width: 0;
 }
 .metric-title { font-size: 0.9rem; color: #6b7280; margin-bottom: 0.2rem; }
-.metric-value { font-size: 1.75rem; font-weight: 700; color: #111827; }
+.metric-value {
+    font-size: 1.75rem; font-weight: 700; color: #111827;
+    white-space: normal; overflow: visible; text-overflow: clip;
+    line-height: 1.2;
+}
+[data-testid="stMetric"] { min-width: 0; }
+[data-testid="stMetricValue"] {
+    white-space: normal; overflow: visible; text-overflow: clip;
+    font-size: clamp(1.05rem, 1.6vw, 1.65rem);
+    line-height: 1.2;
+}
 
 .section-title {
     font-size: 1.35rem; font-weight: 700;
@@ -754,11 +803,9 @@ st.markdown("""
     border-radius: 12px; padding: 0.75rem 0.9rem; margin-bottom: 0.6rem;
 }
 
-.warning-banner {
-    background: #fffbeb; border: 1px solid #fde68a;
-    color: #92400e; border-radius: 12px;
-    padding: 0.7rem 0.9rem; margin: 0.5rem 0;
-    font-weight: 600;
+.neutral-note {
+    color: #6b7280; font-size: 0.88rem;
+    margin: 0.35rem 0 0.55rem 0;
 }
 .success-banner {
     background: #f0fdf4; border: 1px solid #bbf7d0;
@@ -800,6 +847,21 @@ def clean_for_matching(text: str) -> str:
     text = re.sub(r"[\|\(\)\[\]\{\}:]", " ", text)
     text = re.sub(r"\s+", " ", text).strip()
     return text
+
+
+def canonicalize_skill_phrase(text: str) -> str:
+    s = normalize_text(text).lower()
+    s = s.replace("&", " and ")
+    s = re.sub(r"\s*/\s*", "/", s)
+    s = re.sub(r"\s+", " ", s).strip(" .:-,;")
+    return s
+
+
+def skill_search_pattern(term: str) -> str:
+    escaped = re.escape(canonicalize_skill_phrase(term))
+    escaped = escaped.replace("/", r"\s*/\s*")
+    escaped = escaped.replace(r"\ ", r"\s+")
+    return r"(?<!\w)" + escaped + r"(?!\w)"
 
 
 _SENTENCE_WORDS = {
@@ -870,6 +932,15 @@ ALLOWED_MULTIWORD_SKILLS = {
     "etl pipelines", "stored procedures",
     # BUG 3/4/5 FIX
     "data interpretation", "presentation skills", "report writing",
+    "clinical documentation", "insurance verification",
+    "prior authorization", "medical coding", "claims processing",
+    "medication administration", "variance analysis", "financial modeling",
+    "month-end close", "change management", "risk management",
+    "inventory management", "paid search", "paid social",
+    "marketing analytics", "social media marketing", "student engagement",
+    "data entry", "calendar management", "email communication",
+    "records management", "phone support", "order processing",
+    "administrative support", "office administration",
 }
 
 
@@ -942,7 +1013,7 @@ def _split_slash_variants(tokens):
     """Split 'html/css' into ['html', 'css']; leave 'a/b testing' alone (pre-approved)."""
     out = []
     for t in tokens:
-        t = str(t).strip().lower()
+        t = canonicalize_skill_phrase(t)
         if not t:
             continue
         if t in ALLOWED_MULTIWORD_SKILLS or t in SKILL_ALIASES or t in COMMON_JOB_SKILLS:
@@ -987,11 +1058,11 @@ def _scan_dictionary(text_lower: str, found: set, raw_text: str = ""):
             if re.search(pattern, text_lower):
                 found.add(sk)
         else:
-            if re.search(r"(?<!\w)" + re.escape(sk) + r"(?!\w)", text_lower):
+            if re.search(skill_search_pattern(sk), text_lower):
                 found.add(sk)
 
     for alias, canon in SKILL_ALIASES.items():
-        if re.search(r"(?<!\w)" + re.escape(alias) + r"(?!\w)", text_lower):
+        if re.search(skill_search_pattern(alias), text_lower):
             found.add(canon)
 
     # PROBLEM 1 FIX — case-insensitive acronym pass on ORIGINAL raw text
@@ -1059,6 +1130,32 @@ def _extract_from_colon_lines(raw_text: str, found: set):
                     found.add(p)
 
 
+def split_candidate_skill_list(text: str) -> list:
+    parts = re.split(r",|;|\||\band\b|\bor\b", str(text), flags=re.IGNORECASE)
+    tokens = []
+    for part in parts:
+        p = canonicalize_skill_phrase(part)
+        if not p:
+            continue
+        canon = SKILL_ALIASES.get(p, p)
+        if canon in COMMON_JOB_SKILLS or canon in ALLOWED_MULTIWORD_SKILLS:
+            tokens.append(canon)
+            continue
+        if "/" in p:
+            tokens.extend([canonicalize_skill_phrase(x) for x in p.split("/") if canonicalize_skill_phrase(x)])
+        else:
+            tokens.append(p)
+    return tokens
+
+
+def _extract_from_parenthetical_lists(raw_text: str, found: set):
+    for chunk in re.findall(r"\(([^)]{2,220})\)", str(raw_text)):
+        for p in split_candidate_skill_list(chunk):
+            p = SKILL_ALIASES.get(p, p)
+            if (p in COMMON_JOB_SKILLS or p in ALLOWED_MULTIWORD_SKILLS) and looks_like_skill(p):
+                found.add(p)
+
+
 def _extract_from_requirement_phrases(raw_text: str, found: set):
     """Pull skills from 'experience with X, Y, Z' type constructions.
 
@@ -1083,11 +1180,7 @@ def _extract_from_requirement_phrases(raw_text: str, found: set):
     ]
     for pat in patterns:
         for m in re.findall(pat, text, flags=re.IGNORECASE):
-            parts = re.split(r",|;|/|\band\b|\bor\b", m)
-            for p in parts:
-                p = p.strip(" .:-").lower()
-                if not p:
-                    continue
+            for p in split_candidate_skill_list(m):
                 p = SKILL_ALIASES.get(p, p)
                 # Whitelist: only keep if it's a known skill in the dictionary
                 if (p in COMMON_JOB_SKILLS or p in ALLOWED_MULTIWORD_SKILLS) \
@@ -1117,6 +1210,7 @@ def extract_skills_from_text(text: str) -> list:
     _scan_dictionary(lower, found, raw_text=clean_src)
     _extract_from_colon_lines(clean_src, found)
     _extract_from_requirement_phrases(clean_src, found)
+    _extract_from_parenthetical_lists(clean_src, found)
     _extract_from_bullet_points(clean_src, found)  # PROBLEM 2 FIX
 
     # Final whitelist gate — resume skills MUST be in the known dictionary
@@ -1152,12 +1246,14 @@ def extract_exact_job_skills(title: str, text: str) -> list:
     # Alias resolution (handled inside _scan_dictionary already for aliases
     # that appear verbatim; make sure we run the alias resolver too)
     for alias, canon in SKILL_ALIASES.items():
-        if re.search(r"(?<!\w)" + re.escape(alias) + r"(?!\w)", lower):
+        if re.search(skill_search_pattern(alias), lower):
             if canon in COMMON_JOB_SKILLS or canon in ALLOWED_MULTIWORD_SKILLS:
                 found.add(canon)
 
     # Requirement-phrase extractor (already whitelisted)
+    _extract_from_colon_lines(full, found)
     _extract_from_requirement_phrases(full, found)
+    _extract_from_parenthetical_lists(full, found)
 
     # PROBLEM 2 FIX — bullet-point / sentence-chunk extractor
     _extract_from_bullet_points(full, found)
@@ -1169,6 +1265,20 @@ def extract_exact_job_skills(title: str, text: str) -> list:
         if (s in COMMON_JOB_SKILLS or s in ALLOWED_MULTIWORD_SKILLS) and looks_like_skill(s):
             clean.add(s)
     return sorted(clean)
+
+
+def extract_job_skill_debug(title: str, text: str) -> dict:
+    if not text or not str(text).strip():
+        return {"raw": [], "final": []}
+    full = f"{title or ''}\n{text}"
+    found = set()
+    lower = clean_for_matching(full)
+    _scan_dictionary(lower, found, raw_text=full)
+    _extract_from_colon_lines(full, found)
+    _extract_from_requirement_phrases(full, found)
+    _extract_from_parenthetical_lists(full, found)
+    _extract_from_bullet_points(full, found)
+    return {"raw": sorted(found), "final": extract_exact_job_skills(title, text)}
 
 
 # =========================================================
@@ -1497,7 +1607,7 @@ def deduplicate_jobs(df):
 # =========================================================
 # SCORING
 # =========================================================
-def skill_match(user_skills, job_skills):
+def skill_match(user_skills, job_skills, source: str = "full"):
     us = set(apply_skill_aliases(user_skills))
     js = set(apply_skill_aliases(job_skills))
 
@@ -1508,12 +1618,13 @@ def skill_match(user_skills, job_skills):
     raw_score = 0.0 if not js else len(matched) / len(js)
 
     # HONESTY RULE: if the job only yielded a handful of skills, the
-    # description was almost certainly truncated. Don't pretend it's a
-    # confident 100%. Cap at 50%.
+    # description/extraction may be incomplete. Snippets are capped harder
+    # than full descriptions.
     capped = False
     if len(js) < MIN_JOB_SKILLS_FOR_FULL_SCORE:
-        if raw_score > 0.50:
-            raw_score = 0.50
+        cap = API_SNIPPET_LOW_EXTRACTION_CAP if source == "api_snippet" else FULL_DESC_LOW_EXTRACTION_CAP
+        if raw_score > cap:
+            raw_score = cap
             capped = True
 
     return {
@@ -1523,6 +1634,8 @@ def skill_match(user_skills, job_skills):
         "extra": extra,
         "job_skills_count": len(js),
         "capped": capped,
+        "cap": API_SNIPPET_LOW_EXTRACTION_CAP if source == "api_snippet" else FULL_DESC_LOW_EXTRACTION_CAP,
+        "source": source,
     }
 
 
@@ -1595,6 +1708,122 @@ def build_match_reason(matched_count, total_job_skills, role_score, nlp_score, u
     return " | ".join(parts)
 
 
+def job_save_key(row, fallback_idx=None) -> str:
+    link = normalize_text(row.get("job_link", "") if hasattr(row, "get") else "")
+    if link:
+        return link.lower()
+    title = normalize_text(row.get("job_title", "") if hasattr(row, "get") else "").lower()
+    company = normalize_text(row.get("company", "") if hasattr(row, "get") else "").lower()
+    location = normalize_text(row.get("job_location", "") if hasattr(row, "get") else "").lower()
+    return f"{title}|{company}|{location}|{fallback_idx}"
+
+
+def saved_job_ids() -> set:
+    ids = set()
+    for item in st.session_state.get("saved_jobs", []):
+        if isinstance(item, dict):
+            ids.add(item.get("id", ""))
+        else:
+            ids.add(str(item))
+    return ids
+
+
+def build_saved_job(row, global_idx: int) -> dict:
+    matched = row.get("matched_skills", []) if isinstance(row.get("matched_skills", []), list) else []
+    missing = row.get("missing_skills", []) if isinstance(row.get("missing_skills", []), list) else []
+    return {
+        "id": job_save_key(row, global_idx),
+        "global_idx": int(global_idx),
+        "title": normalize_text(row.get("job_title", "")),
+        "company": normalize_text(row.get("company", "")),
+        "location": normalize_text(row.get("job_location", "")),
+        "job_link": normalize_text(row.get("job_link", "")),
+        "match_score": float(row.get("final_score", 0.0) or 0.0),
+        "skill_score": float(row.get("skill_score", 0.0) or 0.0),
+        "matched_skills": list(matched),
+        "missing_skills": list(missing),
+    }
+
+
+def save_job_snapshot(row, global_idx: int):
+    saved = [item for item in st.session_state.get("saved_jobs", []) if isinstance(item, dict)]
+    new_item = build_saved_job(row, global_idx)
+    existing = {item.get("id") for item in saved}
+    if new_item["id"] not in existing:
+        saved.append(new_item)
+    st.session_state["saved_jobs"] = saved
+
+
+def remove_saved_job(save_id: str):
+    st.session_state["saved_jobs"] = [
+        item for item in st.session_state.get("saved_jobs", [])
+        if not (isinstance(item, dict) and item.get("id") == save_id)
+    ]
+
+
+def find_saved_job_index(saved_item: dict, results_df: pd.DataFrame):
+    if results_df is None or results_df.empty or not isinstance(saved_item, dict):
+        return None
+
+    saved_id = saved_item.get("id", "")
+    for global_idx, (_, row) in enumerate(results_df.iterrows()):
+        if job_save_key(row, global_idx) == saved_id:
+            return global_idx
+
+    fallback_idx = saved_item.get("global_idx")
+    if isinstance(fallback_idx, int) and 0 <= fallback_idx < len(results_df):
+        row = results_df.iloc[fallback_idx]
+        if job_save_key(row, fallback_idx) == saved_id:
+            return fallback_idx
+
+    return None
+
+
+def render_saved_jobs_section(results_df: pd.DataFrame, display_page_size: int):
+    saved = [item for item in st.session_state.get("saved_jobs", []) if isinstance(item, dict)]
+    st.session_state["saved_jobs"] = saved
+
+    st.markdown('<div class="section-title">⭐ Saved Jobs</div>', unsafe_allow_html=True)
+    with st.expander(f"⭐ Saved Jobs ({len(saved)} saved)", expanded=True):
+        if saved:
+            clear_col, spacer_col = st.columns([1, 3])
+            with clear_col:
+                if st.button("Clear All Saved Jobs", key="clear_all_saved_jobs"):
+                    st.session_state["saved_jobs"] = []
+                    st.rerun()
+
+            for saved_idx, item in enumerate(saved):
+                save_id = item.get("id", "")
+                with st.container(border=True):
+                    st.markdown(f"**{safe(item.get('title', ''))}**")
+                    st.caption(f"{safe(item.get('company', ''))}  -  {safe(item.get('location', ''))}")
+                    st.caption(f"Overall Score: **{format_pct(item.get('match_score', 0))}**")
+                    st.write(f"Matched Skills: {display_skills_str(item.get('matched_skills', [])) or '-'}")
+                    st.write(f"Missing Skills: {display_skills_str(item.get('missing_skills', [])) or '-'}")
+
+                    action_cols = st.columns([1, 1, 1])
+                    with action_cols[0]:
+                        if item.get("job_link"):
+                            st.link_button("Open Job", item["job_link"])
+                    with action_cols[1]:
+                        if st.button("View Details", key=f"saved_view_{saved_idx}"):
+                            target_idx = find_saved_job_index(item, results_df)
+                            if target_idx is not None:
+                                st.session_state["page_no"] = (target_idx // display_page_size) + 1
+                                st.session_state["selected_job_idx"] = target_idx % display_page_size
+                                st.session_state["selected_global_idx"] = target_idx
+                                st.session_state[f"__trigger_full_fetch_{target_idx}"] = True
+                                st.rerun()
+                            else:
+                                st.warning("This saved job is not in the current filtered results.")
+                    with action_cols[2]:
+                        if st.button("Remove", key=f"saved_remove_{saved_idx}"):
+                            remove_saved_job(save_id)
+                            st.rerun()
+        else:
+            st.info("No saved jobs yet. Use the Save button on any result to add one here.")
+
+
 # =========================================================
 # ADZUNA FETCH
 # =========================================================
@@ -1607,6 +1836,7 @@ def fetch_live_jobs(query: str, max_pages: int = MAX_ADZUNA_PAGES) -> pd.DataFra
         return pd.DataFrame()
 
     jobs = []
+    skipped_pages = []
     progress = st.progress(0, text="Fetching live jobs...")
 
     for page in range(1, max_pages + 1):
@@ -1620,12 +1850,30 @@ def fetch_live_jobs(query: str, max_pages: int = MAX_ADZUNA_PAGES) -> pd.DataFra
             "content-type": "application/json",
         }
 
-        try:
-            r = requests.get(url, params=params, timeout=25)
-            r.raise_for_status()
-            data = r.json()
-        except Exception as e:
-            st.warning(f"Could not fetch page {page}: {e}")
+        data = None
+        last_error = None
+        last_status = None
+        for attempt in range(1, 4):
+            try:
+                r = requests.get(url, params=params, timeout=25)
+                last_status = r.status_code
+                r.raise_for_status()
+                data = r.json()
+                break
+            except Exception as e:
+                last_error = repr(e)
+                print(
+                    f"[ADZUNA FETCH] page={page} attempt={attempt} "
+                    f"status={last_status} error={last_error}"
+                )
+                time.sleep(0.6 * attempt)
+
+        if data is None:
+            skipped_pages.append({
+                "page": page,
+                "status": last_status,
+                "error": last_error,
+            })
             continue
 
         page_results = data.get("results", [])
@@ -1670,11 +1918,14 @@ def fetch_live_jobs(query: str, max_pages: int = MAX_ADZUNA_PAGES) -> pd.DataFra
 
     progress.empty()
     df = pd.DataFrame(jobs)
+    st.session_state["adzuna_skipped_pages"] = skipped_pages
     if df.empty:
         return df
     df = deduplicate_jobs(df)
     df["job_text"] = build_job_text(df)
-    return df.reset_index(drop=True)
+    df = df.reset_index(drop=True)
+    df.attrs["adzuna_skipped_pages"] = skipped_pages
+    return df
 
 
 # =========================================================
@@ -1685,9 +1936,12 @@ for key, default in [
     ("page_no", 1),
     ("jobs_analyzed_count", 0),
     ("selected_job_idx", 0),
+    ("selected_global_idx", 0),
     ("saved_jobs", []),
     ("full_desc_cache", {}),       # url -> full description text
     ("full_desc_skills", {}),      # url -> extracted skills list
+    ("full_desc_fetch_failures", {}),
+    ("adzuna_skipped_pages", []),
 ]:
     if key not in st.session_state:
         st.session_state[key] = default
@@ -1838,6 +2092,10 @@ if run_search:
     with st.spinner("Fetching live jobs and ranking..."):
         query = desired_role.strip() or "jobs"
         raw_df = fetch_live_jobs(query=query, max_pages=MAX_ADZUNA_PAGES)
+        skipped_pages = raw_df.attrs.get(
+            "adzuna_skipped_pages",
+            st.session_state.get("adzuna_skipped_pages", []),
+        )
 
         if raw_df.empty:
             st.warning("No jobs were fetched from the API.")
@@ -1912,7 +2170,7 @@ if run_search:
                 )
             js = apply_skill_aliases(js)
 
-            sm = skill_match(user_skills, js)
+            sm = skill_match(user_skills, js, source="api_snippet")
             skill_scores.append(sm["score"])
             matched_all.append(sm["matched"])
             missing_all.append(sm["missing"])
@@ -1967,14 +2225,18 @@ if run_search:
 
         results.attrs["fetched_count"] = fetched_count
         results.attrs["cleaned_count"] = cleaned_count
+        results.attrs["adzuna_skipped_pages"] = skipped_pages
 
         st.session_state["results_all_ranked"] = results
         st.session_state["jobs_analyzed_count"] = len(work)
+        st.session_state["adzuna_skipped_pages"] = skipped_pages
         st.session_state["page_no"] = 1
         st.session_state["selected_job_idx"] = 0
+        st.session_state["selected_global_idx"] = 0
         # Reset full-desc caches when a new search runs
         st.session_state["full_desc_cache"] = {}
         st.session_state["full_desc_skills"] = {}
+        st.session_state["full_desc_fetch_failures"] = {}
 
 
 # =========================================================
@@ -1990,6 +2252,8 @@ fetched_count = results_all_ranked.attrs.get("fetched_count", len(results_all_ra
 cleaned_count = results_all_ranked.attrs.get("cleaned_count", len(results_all_ranked))
 analyzed_count = st.session_state.get("jobs_analyzed_count", len(results_all_ranked))
 
+render_saved_jobs_section(results_all_ranked, display_page_size)
+
 m1, m2, m3, m4 = st.columns(4)
 with m1:
     st.markdown(f'<div class="metric-card"><div class="metric-title">Fetched</div><div class="metric-value">{fetched_count:,}</div></div>', unsafe_allow_html=True)
@@ -1998,8 +2262,14 @@ with m2:
 with m3:
     st.markdown(f'<div class="metric-card"><div class="metric-title">Analyzed</div><div class="metric-value">{analyzed_count:,}</div></div>', unsafe_allow_html=True)
 with m4:
-    best = format_pct(results_all_ranked["final_score"].max())
-    st.markdown(f'<div class="metric-card"><div class="metric-title">Top score</div><div class="metric-value">{best}</div></div>', unsafe_allow_html=True)
+    st.metric("Top score", format_pct(results_all_ranked["final_score"].max()))
+
+skipped_pages = results_all_ranked.attrs.get(
+    "adzuna_skipped_pages",
+    st.session_state.get("adzuna_skipped_pages", []),
+)
+if skipped_pages:
+    st.caption("Some pages were temporarily unavailable; results were still loaded.")
 
 st.markdown(f"""
 <div style="background:#f8fafc;border:1px solid #e5e7eb;border-radius:14px;padding:0.9rem 1rem;margin:0.8rem 0;">
@@ -2008,7 +2278,7 @@ Overall = <b>{nlp_weight*100:.0f}%</b> Profile Similarity (resume ↔ job text)
  + <b>{skill_weight*100:.0f}%</b> Skills Match (your skills vs the skills extracted from the job)
  + <b>{role_weight*100:.0f}%</b> Role Match (job text vs typical responsibilities of a <i>{desired_role}</i>).<br>
 If fewer than {MIN_JOB_SKILLS_FOR_FULL_SCORE} skills could be extracted from a posting,
-the Skills Match is capped at 50% and a warning is shown. Click <b>View Details</b>
+the Skills Match is capped at 50% for API snippets or 70% for full descriptions and a warning is shown. Click <b>View Details</b>
 on any job to fetch the full page and recompute with complete data.
 </div>
 """, unsafe_allow_html=True)
@@ -2017,6 +2287,9 @@ total_results = len(results_all_ranked)
 total_pages = max(1, math.ceil(total_results / display_page_size))
 if st.session_state["page_no"] > total_pages:
     st.session_state["page_no"] = total_pages
+if st.session_state["page_no"] < 1:
+    st.session_state["page_no"] = 1
+
 current_page = st.session_state["page_no"]
 start_idx = (current_page - 1) * display_page_size
 end_idx = min(start_idx + display_page_size, total_results)
@@ -2030,11 +2303,13 @@ with nav1:
     if st.button("⬅ Prev", disabled=(current_page == 1), key="prev_page"):
         st.session_state["page_no"] = max(1, current_page - 1)
         st.session_state["selected_job_idx"] = 0
+        st.session_state["selected_global_idx"] = (st.session_state["page_no"] - 1) * display_page_size
         st.rerun()
 with nav3:
     if st.button("Next ➡", disabled=(current_page == total_pages), key="next_page"):
         st.session_state["page_no"] = min(total_pages, current_page + 1)
         st.session_state["selected_job_idx"] = 0
+        st.session_state["selected_global_idx"] = (st.session_state["page_no"] - 1) * display_page_size
         st.rerun()
 with nav2:
     st.caption(f"Page {current_page} of {total_pages}")
@@ -2045,7 +2320,10 @@ with nav2:
 # =========================================================
 left_col, right_col = st.columns([1.05, 1.35], gap="large")
 
-selected_local_idx = min(st.session_state["selected_job_idx"], max(0, len(page_df) - 1))
+max_local_idx = max(0, len(page_df) - 1)
+selected_local_idx = min(max(int(st.session_state.get("selected_job_idx", 0) or 0), 0), max_local_idx)
+st.session_state["selected_job_idx"] = selected_local_idx
+st.session_state["selected_global_idx"] = start_idx + selected_local_idx
 
 with left_col:
     st.markdown("### Job List")
@@ -2053,7 +2331,8 @@ with left_col:
     for idx in range(len(page_df)):
         row        = page_df.iloc[idx]
         global_idx = start_idx + idx
-        is_saved   = global_idx in st.session_state["saved_jobs"]
+        save_id    = job_save_key(row, global_idx)
+        is_saved   = save_id in saved_job_ids()
         is_selected = (idx == selected_local_idx)
 
         with st.container(border=True):
@@ -2088,22 +2367,18 @@ with left_col:
         with c1:
             if st.button("👁 View Details", key=f"view_{global_idx}"):
                 st.session_state["selected_job_idx"] = idx
+                st.session_state["selected_global_idx"] = global_idx
                 st.session_state[f"__trigger_full_fetch_{global_idx}"] = True
                 st.rerun()
         with c2:
             if is_saved:
                 if st.button("★ Unsave", key=f"unsave_{global_idx}"):
-                    st.session_state["saved_jobs"].remove(global_idx)
+                    remove_saved_job(save_id)
                     st.rerun()
             else:
                 if st.button("☆ Save", key=f"save_{global_idx}"):
-                    st.session_state["saved_jobs"].append(global_idx)
+                    save_job_snapshot(row, global_idx)
                     st.rerun()
-
-    if st.session_state["saved_jobs"]:
-        st.markdown("### ⭐ Saved Jobs")
-        st.write(f"Saved count: {len(st.session_state['saved_jobs'])}")
-
 
 # =========================================================
 # RIGHT: JOB DETAIL
@@ -2115,6 +2390,7 @@ with right_col:
         selected_row = page_df.iloc[selected_local_idx]
         selected_global_idx = start_idx + selected_local_idx
         job_link = str(selected_row.get("job_link", "") or "")
+        selected_save_id = job_save_key(selected_row, selected_global_idx)
         trigger_key = f"__trigger_full_fetch_{selected_global_idx}"
 
         st.markdown(
@@ -2126,7 +2402,7 @@ with right_col:
         st.markdown(f'<div class="job-meta"><strong>Company:</strong> {safe(selected_row["company"])}</div>', unsafe_allow_html=True)
         st.markdown(f'<div class="job-meta"><strong>Location:</strong> {safe(selected_row["job_location"])}</div>', unsafe_allow_html=True)
 
-        if selected_global_idx in st.session_state["saved_jobs"]:
+        if selected_save_id in saved_job_ids():
             st.markdown('<div class="saved-pill">★ Saved</div>', unsafe_allow_html=True)
 
         # BUG 7 FIX — single-line markdown so Streamlit doesn't render as code block
@@ -2149,18 +2425,24 @@ with right_col:
         full_desc = st.session_state["full_desc_cache"].get(job_link, "")
         used_full_desc = bool(full_desc)
         fetched_full_desc_this_run = False
+        fallback_summary_used = False
 
         if st.session_state.pop(trigger_key, False) and job_link and not full_desc:
             with st.spinner("Loading full job description from the source website..."):
                 fetched = fetch_full_job_description(job_link)
                 if fetched and len(fetched) > len(api_snippet) + 50:
                     st.session_state["full_desc_cache"][job_link] = fetched
+                    st.session_state["full_desc_fetch_failures"].pop(job_link, None)
                     full_desc = fetched
                     used_full_desc = True
                     fetched_full_desc_this_run = True
                 else:
                     st.session_state["full_desc_cache"][job_link] = ""
+                    st.session_state["full_desc_fetch_failures"][job_link] = (
+                        "Full description fetch failed; fallback summary used."
+                    )
                     used_full_desc = False
+                    fallback_summary_used = True
 
         # ----- Recalculate with full text when available -----
         if used_full_desc:
@@ -2171,7 +2453,7 @@ with right_col:
                 )
                 st.session_state["full_desc_skills"][job_link] = full_job_skills
 
-            sm = skill_match(user_skills, full_job_skills)
+            sm = skill_match(user_skills, full_job_skills, source="full")
             display_job_skills = full_job_skills
             display_matched    = sm["matched"]
             display_missing    = sm["missing"]
@@ -2233,16 +2515,21 @@ with right_col:
             display_final_score = initial_final_score
             display_capped      = initial_capped
             role_hits           = selected_row.get("role_hits", []) if isinstance(selected_row.get("role_hits", []), list) else []
+            fallback_summary_used = bool(
+                job_link
+                and job_link in st.session_state["full_desc_cache"]
+                and not st.session_state["full_desc_cache"][job_link]
+            )
 
             if job_link:
                 if job_link in st.session_state["full_desc_cache"] and not st.session_state["full_desc_cache"][job_link]:
                     # BUG 1D FIX — show a Retry button next to the warning.
                     # @st.cache_data caches empty results for 1 hour; the retry
                     # clears that so a fresh fetch attempt can run.
-                    col_warn, col_retry = st.columns([3, 1])
-                    with col_warn:
+                    col_note, col_retry = st.columns([3, 1])
+                    with col_note:
                         st.markdown(
-                            '<div class="warning-banner">⚠️ Could not load the full description from the source site — showing results based on the API snippet only.</div>',
+                            '<div class="neutral-note">Using available job summary for scoring.</div>',
                             unsafe_allow_html=True,
                         )
                     with col_retry:
@@ -2250,13 +2537,14 @@ with right_col:
                             st.cache_data.clear()
                             st.session_state["full_desc_cache"].pop(job_link, None)
                             st.session_state["full_desc_skills"].pop(job_link, None)
+                            st.session_state["full_desc_fetch_failures"].pop(job_link, None)
                             st.session_state[f"__trigger_full_fetch_{selected_global_idx}"] = True
                             st.rerun()
 
-        # ----- Honesty warning -----
+        # ----- Neutral summary note -----
         if display_capped or len(display_job_skills) < MIN_JOB_SKILLS_FOR_FULL_SCORE:
             st.markdown(
-                f'<div class="warning-banner">⚠️ Only {len(display_job_skills)} skill(s) could be extracted — the API description is likely incomplete. Skills Match is capped at 50%. Click <b>Open Job Posting</b> or wait for the full description to load.</div>',
+                '<div class="neutral-note">Using available job summary for scoring.</div>',
                 unsafe_allow_html=True,
             )
 
@@ -2269,20 +2557,11 @@ with right_col:
         with s3: st.metric("Skills Match",       format_pct(display_skill_score))
         with s4: st.metric("Role Match",         format_pct(display_role_score))
 
-        # BUG 3 FIX — Prominent warning when scoring is based on the API snippet
-        # and the skill count is suspiciously low (< 8). Without the full page,
-        # an apparent 100% can be misleading.
-        if (not used_full_desc) and len(display_job_skills) < 8:
-            st.markdown(
-                f'<div class="warning-banner">⚠️ <b>Match based on incomplete data.</b> '
-                f'Only {len(display_job_skills)} skill(s) were extracted from the API snippet — '
-                f'real postings typically list 15–25+. The match percentage above is '
-                f'<u>not reliable</u> until the full description is loaded. '
-                f'Click <b>Retry</b> below or <b>Open Job Posting</b> to verify.</div>',
-                unsafe_allow_html=True,
-            )
-
-        source_label = "full job description" if used_full_desc else "API snippet only"
+        source_label = "full job description" if used_full_desc else "job summary"
+        st.markdown(
+            f'<div class="neutral-note">Source: {"full job description" if used_full_desc else "job summary"}</div>',
+            unsafe_allow_html=True,
+        )
         reason = build_match_reason(
             len(display_matched), len(display_job_skills),
             display_role_score, display_nlp_score, used_full_desc,
@@ -2292,7 +2571,8 @@ with right_col:
         # PROBLEM 3 FIX — Collapsible score-math expander (always present)
         with st.expander("📊 How these scores were calculated", expanded=False):
             _denom = max(len(display_job_skills), 1)
-            _cap_line = "  (capped at 50% because fewer than 4 skills were extracted)" if display_capped else ""
+            _cap = API_SNIPPET_LOW_EXTRACTION_CAP if not used_full_desc else FULL_DESC_LOW_EXTRACTION_CAP
+            _cap_line = f"  (capped at {_cap*100:.0f}% because fewer than {MIN_JOB_SKILLS_FOR_FULL_SCORE} skills were extracted)" if display_capped else ""
             st.markdown("**Skills Match**")
             st.markdown(
                 f"Skills extracted from this job: "
@@ -2415,7 +2695,7 @@ with right_col:
             print(f"  Profile Sim. : {format_pct(display_nlp_score)}")
             print(f"  Role Match   : {format_pct(display_role_score)}")
             print(f"  Overall      : {format_pct(display_final_score)}")
-            print(f"  Source: {'Full page scrape' if used_full_desc else 'API snippet only'}")
+            print(f"  Source: {'Full page scrape' if used_full_desc else 'Job summary'}")
             print("═" * 60)
         except Exception:
             pass
@@ -2424,15 +2704,50 @@ with right_col:
         if debug_mode:
             with st.expander("🐞 Debug — full extraction pipeline"):
                 st.markdown("**Step 1 — API snippet (what Adzuna returned)**")
+                skipped_pages = st.session_state.get("adzuna_skipped_pages", [])
+                fetch_failure = st.session_state["full_desc_fetch_failures"].get(job_link)
+                st.markdown("**Technical status**")
+                st.write({
+                    "source_type": "full description" if used_full_desc else "job summary",
+                    "full_description_fetch_status": (
+                        "loaded" if used_full_desc else fetch_failure or "not requested"
+                    ),
+                    "api_page_skipped_count": len(skipped_pages),
+                    "api_pages_skipped": [
+                        {"page": item.get("page"), "status": item.get("status")}
+                        for item in skipped_pages
+                        if isinstance(item, dict)
+                    ],
+                    "extraction_warning": (
+                        f"Only {len(display_job_skills)} job skill(s) extracted; score capped."
+                        if display_capped or len(display_job_skills) < MIN_JOB_SKILLS_FOR_FULL_SCORE
+                        else ""
+                    ),
+                })
+
                 st.code(api_snippet[:3000] or "(empty)")
 
                 st.markdown(f"**Step 2 — Full description (scraped = {used_full_desc})**")
                 st.code((full_desc or "(none)")[:3000])
+                debug_source_text = full_desc if used_full_desc else api_snippet
+                debug_extract = extract_job_skill_debug(selected_row["job_title"], debug_source_text)
+                st.markdown("**Selected job title**")
+                st.write(selected_row["job_title"])
+                st.markdown("**Full description character count**")
+                st.write(len(full_desc or ""))
+                st.markdown("**Full description loaded successfully**")
+                st.write(bool(used_full_desc))
+                st.markdown(f"**Raw extracted skills before aliasing ({len(debug_extract['raw'])})**")
+                st.write(debug_extract["raw"])
 
                 st.markdown(f"**Step 3 — Extracted job skills ({len(display_job_skills)})**")
                 st.write(display_job_skills)
 
-                st.markdown(f"**Step 4 — Your resume + typed skills ({len(user_skills)})**")
+                st.markdown(f"**Resume skills ({len(resume_skills)})**")
+                st.write(resume_skills)
+                st.markdown(f"**Typed skills ({len(typed_skills)})**")
+                st.write(typed_skills)
+                st.markdown(f"**Step 4 - Combined candidate skills ({len(user_skills)})**")
                 st.write(user_skills)
 
                 st.markdown(f"**Step 5 — Matched ({len(display_matched)})**")
