@@ -97,7 +97,7 @@ The primary objectives of this project are to:
 ![Insights](salary_insights.png)
 
 ### Resume Improvement
-![Improvements](resume_improvement.png)
+![Improvements](resume_imporvement.png)
 
 
 ## Future Improvements
